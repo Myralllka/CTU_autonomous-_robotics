@@ -1,6 +1,5 @@
 <launch>
     <node name="hw1_aro_scan" pkg="aro_scan" type="scancollector.py" output="screen" required="true">
     </node>
-    <param name="batch_length" type="int" value="500"/>
-    <param name="start_time" type="int" value="0"/>
+    <param name="batch_length" type="int" value="100"/>
 </launch>
