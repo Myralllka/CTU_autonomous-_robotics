@@ -1,0 +1,13 @@
+<launch>
+
+    <include file="$(find aro_sim)/launch/robocop_sim.launch" pass_all_args="true">
+      <arg name="rviz" value="true"/>
+      <arg name="gui" value="false"/>
+    </include>
+
+    <node name="robocop_keyboard" pkg="aro_robocop_keyboard" type="robocop_keyboard_control.py" output="screen">
+      <param name="max_speed" value="1" />
+      <param name="change_speed" value="0.1" />
+    </node>
+    
+</launch>

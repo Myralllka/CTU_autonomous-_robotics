@@ -36,7 +36,7 @@ class ScanCollector():
             counter += 1
             deg = np.rad2deg(msg.angle_min + step * counter)
             #print(deg)
-            if np.abs(deg) < 30:
+            if np.abs(deg) > 30:
                 # Discard measurements taken at an angle greater than 30° or lower than -30°
                 continue
             if (each < msg.range_min) or (each > msg.range_max):
