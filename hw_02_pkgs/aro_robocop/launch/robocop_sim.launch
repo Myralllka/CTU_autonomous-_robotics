@@ -1,0 +1,10 @@
+<launch>
+
+    <include file="$(find aro_sim)/launch/robocop_sim.launch" pass_all_args="true">
+      <arg name="rviz" value="true"/>
+      <arg name="gui" value="false"/>
+    </include>
+
+    <node name="robocop" pkg="aro_robocop" type="robocop.py" output="screen"></node>
+    
+</launch>
