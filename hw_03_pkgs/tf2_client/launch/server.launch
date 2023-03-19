@@ -1,0 +1,9 @@
+<launch>
+    <group ns="tf">
+        <!-- The server node does not use private namespace for params. -->
+        <param name="buffer_size" value="30.0"/>
+        <param name="publish_frame_service" value="true"/>
+        <param name="use_node_namespace" value="true"/>
+        <node name="server" pkg="tf2_ros" type="buffer_server"/>
+    </group>
+</launch>

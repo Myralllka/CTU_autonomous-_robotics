@@ -1,0 +1,45 @@
+<package format="3">
+    <name>aro_localization</name>
+    <version>2023.0.0</version>
+    <description>
+        Localization package for Autonomous Robotics course.
+    </description>
+    <maintainer email="peckama2@fel.cvut.cz">Martin Pecka</maintainer>
+    <author email="peckama2@fel.cvut.cz">Martin Pecka</author>
+    <author email="zimmerk@fel.cvut.cz">Karel Zimmermann</author>
+    <license>BSD</license>
+
+    <url>https://cw.fel.cvut.cz/wiki/courses/aro/tutorials/start</url>
+
+    <buildtool_depend>catkin</buildtool_depend>
+    <buildtool_depend condition="$ROS_PYTHON_VERSION == 2">python-setuptools</buildtool_depend>
+    <buildtool_depend condition="$ROS_PYTHON_VERSION == 3">python3-setuptools</buildtool_depend>
+    
+    <exec_depend>apriltag_ros</exec_depend>
+    <exec_depend>aro_slam</exec_depend>
+    <exec_depend>aro_sim</exec_depend>
+    <exec_depend>gazebo_msgs</exec_depend>
+    <exec_depend>gazebo_ros</exec_depend>
+    <exec_depend>geometry_msgs</exec_depend>
+    <exec_depend>image_proc</exec_depend>
+    <exec_depend>image_transport</exec_depend>
+    <exec_depend>kobuki_msgs</exec_depend>
+    <exec_depend>message_runtime</exec_depend>
+    <exec_depend>nav_msgs</exec_depend>
+    <exec_depend>nav_utils</exec_depend>
+    <exec_depend>nodelet</exec_depend>
+    <exec_depend condition="$ROS_PYTHON_VERSION == 2">python-matplotlib</exec_depend>
+    <exec_depend condition="$ROS_PYTHON_VERSION == 3">python3-matplotlib</exec_depend>
+    <exec_depend condition="$ROS_PYTHON_VERSION == 2">python-numpy</exec_depend>
+    <exec_depend condition="$ROS_PYTHON_VERSION == 3">python3-numpy</exec_depend>
+    <exec_depend condition="$ROS_PYTHON_VERSION == 2">python-scipy</exec_depend>
+    <exec_depend condition="$ROS_PYTHON_VERSION == 3">python3-scipy</exec_depend>
+    <exec_depend>ros_numpy</exec_depend>
+    <exec_depend>rosbag</exec_depend>
+    <exec_depend>rospy</exec_depend>
+    <exec_depend>tf</exec_depend>
+    <exec_depend>tf2_geometry_msgs</exec_depend>
+    <exec_depend>tf2_py</exec_depend>
+    <exec_depend>tf2_ros</exec_depend>
+    <exec_depend>visualization_msgs</exec_depend>
+</package>

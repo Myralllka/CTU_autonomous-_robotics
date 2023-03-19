@@ -1,0 +1,30 @@
+<launch>
+    <arg name="world" default="stage_4"/>
+    <arg name="gui" default="false"/>
+    <arg name="ground_truth" default="true"/>
+    <arg name="keyboard" default="false"/>
+    <arg name="joy" default="true"/>
+    <arg name="alignment" default="frame_to_frame"/>
+    <arg name="descriptor" default="position"/>
+    <arg name="loss" default="point_to_point"/>
+    <arg name="rviz" default="true"/>
+    <arg name="csv" default="$(dirname)/../data/alignment_$(arg alignment)_descriptor_$(arg descriptor)_loss_$(arg loss).csv"/>
+    <arg name="record" default="false"/>
+
+    <env name="ROSCONSOLE_FORMAT" value="[${severity} ${walltime} ${node}] ${message}"/>
+    <env name="ROSCONSOLE_STDOUT_LINE_BUFFERED" value="1"/>
+
+    <param name="use_sim_time" value="true"/>
+
+    <include file="$(find aro_sim)/launch/onlysim.launch" pass_all_args="true">
+        <arg name="rviz" value="false"/>
+    </include>
+    <!-- REMOVE START -->
+    <include if="$(arg keyboard)" file="$(find aro_sim)/launch/teleop_keyboard.launch"/>
+    <include if="$(arg joy)" file="$(find aro_sim)/launch/teleop_joy.launch"/>
+    <!-- REMOVE END -->
+
+    <include file="$(dirname)/aro_slam.launch" pass_all_args="true"/>
+    <include file="$(dirname)/tf_metrics.launch"/>
+    <include if="$(arg record)" file="$(dirname)/record.launch" pass_all_args="true"/>
+</launch>

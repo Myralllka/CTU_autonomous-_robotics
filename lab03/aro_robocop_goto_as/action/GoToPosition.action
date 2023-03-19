@@ -1,0 +1,11 @@
+#goal definition
+geometry_msgs/Point position
+---
+#result definition
+bool success
+string message
+---
+#feedback
+float32 position_error
+float32 angle_error
+string message

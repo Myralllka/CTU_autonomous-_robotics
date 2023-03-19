@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<package format="2">
+    <name>tf2_client</name>
+    <version>0.0.0</version>
+    <description>Configurable tf2 client wrapper using local or remote buffer.</description>
+    <maintainer email="tpetricek@gmail.com">Tomas Petricek</maintainer>
+    <license>MIT</license>
+    <author email="tpetricek@gmail.com">Tomas Petricek</author>
+    <buildtool_depend>catkin</buildtool_depend>
+    <depend>roscpp</depend>
+    <depend>rospy</depend>
+    <depend>tf2</depend>
+    <depend>tf2_ros</depend>
+</package>

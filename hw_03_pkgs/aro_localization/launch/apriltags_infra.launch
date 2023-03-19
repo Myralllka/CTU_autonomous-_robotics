@@ -1,0 +1,23 @@
+<launch>
+    
+    <arg name="camera_name" default="infra1" />
+    <arg name="camera" default="camera/$(arg camera_name)" />
+    
+    <node name="$(arg camera_name)_decompress" pkg="image_transport" type="republish" args="compressed raw" respawn="true">
+        <remap from="in" to="$(arg camera)/image_rect_raw" />
+        <remap from="out" to="$(arg camera)/image_decompressed" />
+    </node>
+    
+    <node name="$(arg camera_name)_apriltag_detector" pkg="apriltag_ros" type="apriltag_ros_continuous_node" respawn="true">
+        <rosparam command="load" file="$(dirname)/../config/apriltags.yaml"/>
+
+        <param name="camera_frame" type="str" value="camera_$(arg camera_name)_optical_frame"/>
+        <param name="publish_tag_detections_image" type="bool" value="true"/>
+
+        <remap from="image_rect" to="$(arg camera)/image_decompressed"/>
+        <remap from="camera_info" to="$(arg camera)/camera_info"/>
+        <remap from="tag_detections" to="apriltag"/>
+        <remap from="tag_detections_image" to="$(arg camera)/apriltag_image"/>
+    </node>
+
+</launch>

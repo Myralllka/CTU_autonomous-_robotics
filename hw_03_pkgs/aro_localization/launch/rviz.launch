@@ -1,0 +1,4 @@
+<launch>
+    <node name="$(anon rviz)" pkg="rviz" type="rviz" respawn="true"
+          args="-d $(dirname)/../rviz/rviz.rviz"/>
+</launch>

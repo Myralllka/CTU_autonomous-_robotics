@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>aro_robocop_goto_as</name>
+  <version>1.2023.0</version>
+  <description>Lab03 package for ARO</description>
+
+  <maintainer email="penicrob@fel.cvut.cz">Robert Penicka</maintainer>
+
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <build_depend>rospy</build_depend>
+  <build_depend>message_generation</build_depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>actionlib_msgs</build_depend>
+  <build_export_depend>rospy</build_export_depend>
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>message_generation</exec_depend>
+  <exec_depend>message_runtime</exec_depend>
+  <exec_depend>ros_numpy</exec_depend>
+  <exec_depend>scipy</exec_depend>
+  <exec_depend>actionlib_msgs</exec_depend>
+  <exec_depend>actionlib</exec_depend>
+  <exec_depend>numpy</exec_depend>
+
+</package>

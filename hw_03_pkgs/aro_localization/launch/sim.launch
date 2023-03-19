@@ -1,0 +1,26 @@
+<launch>
+    <arg name="world" default="stage_4"/>
+    <arg name="map_frame" default="fused_map" />
+    <arg name="fixed_frame" default="$(arg map_frame)_fast" doc="Just for visualization" />
+    <arg name="gui" default="true"/>
+    <arg name="ground_truth" default="true"/>
+    <arg name="keyboard" default="false"/>
+    <arg name="joy" default="true"/>
+    <arg name="rviz" default="true"/>
+    <arg name="record" default="false"/>
+    <arg name="run_icp_slam" default="false" />
+    
+    <env name="ROSCONSOLE_FORMAT" value="[${severity} ${walltime} ${node}] ${message}"/>
+    <env name="ROSCONSOLE_STDOUT_LINE_BUFFERED" value="1"/>
+
+    <include if="$(arg keyboard)" file="$(find aro_sim)/launch/teleop_keyboard.launch"/>
+    <include if="$(arg joy)" file="$(find aro_sim)/launch/teleop_joy.launch"/>
+
+    <include file="$(find aro_sim)/launch/sim_with_markers.launch" pass_all_args="true">
+        <arg name="rviz" value="false"/>
+    </include>
+
+    <include file="$(dirname)/aro_loc_sim.launch" pass_all_args="true" />
+
+    <include if="$(arg record)" file="$(dirname)/record.launch" pass_all_args="true"/>
+</launch>

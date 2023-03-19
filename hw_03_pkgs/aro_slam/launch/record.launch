@@ -1,0 +1,27 @@
+<launch>
+    <arg name="world" default="live"/>
+
+    <env name="ROSCONSOLE_FORMAT" value="[${severity} ${walltime} ${node}] ${message}"/>
+    <env name="ROSCONSOLE_STDOUT_LINE_BUFFERED" value="1"/>
+
+    <node name="rosbag_record_input" pkg="rosbag" type="record"
+          args="--lz4
+                --chunksize=8192
+                -o $(find aro_slam)/data/$(arg world)_input
+                /ground_truth_odom
+                /odom
+                /scan
+                /tf
+                /tf_static"/>
+
+    <node if="0" name="rosbag_record_output" pkg="rosbag" type="record"
+          args="-o $(find aro_slam)/data/$(arg world)_output
+                /cloud/smooth
+                /icp_slam/markers
+                /map
+                /position_error
+                /rosout_agg
+                /rotation_error
+                /tf
+                /tf_static"/>
+</launch>

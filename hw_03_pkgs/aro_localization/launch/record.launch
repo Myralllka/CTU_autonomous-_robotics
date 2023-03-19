@@ -1,0 +1,30 @@
+<launch>
+    <arg name="world" default="live"/>
+    <arg name="record_dir" default="$(env HOME)" />
+
+    <env name="ROSCONSOLE_FORMAT" value="[${severity} ${walltime} ${node}] ${message}"/>
+    <env name="ROSCONSOLE_STDOUT_LINE_BUFFERED" value="1"/>
+
+    <node name="rosbag_record_input" pkg="rosbag" type="record"
+          args="--lz4
+                --chunksize=8192
+                -o $(arg record_dir)/$(arg world)_loc_input
+                /ground_truth_odom
+                /odom
+                /icp_odom
+                /bumper
+                /mobile_base/sensors/core
+                /apriltag
+                /tf
+                /tf_static"/>
+
+    <node name="rosbag_record_output" pkg="rosbag" type="record"
+          args="--lz4
+                -o $(arg record_dir)/$(arg world)_loc_output
+                /fused_odom
+                /fused_odom_viz
+                /fused_odom_path
+                /rosout_agg
+                /tf
+                /tf_static"/>
+</launch>

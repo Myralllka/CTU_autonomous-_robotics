@@ -1,0 +1,11 @@
+<launch>
+    <arg name="map_frame" default="fused_map" />
+    <arg name="fixed_frame" default="$(arg map_frame)_fast" doc="Just for visualization" />
+
+    <include file="$(dirname)/aro_loc.launch" pass_all_args="true">
+        <arg name="marker_camera" value="rgb" />
+        <arg name="map_frame" value="$(arg map_frame)" />
+        <arg name="fixed_frame" value="$(arg fixed_frame)" />
+        <arg name="camera_name" value="rgb" />
+    </include>
+</launch>

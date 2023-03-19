@@ -1,0 +1,65 @@
+<library path="lib/libnav_utils_plugins">
+    <class name="nav_utils/odom_to_tf"
+           type="nav_utils::OdometryToTransformNodelet"
+           base_class_type="nodelet::Nodelet">
+        <description>
+            Odometry to tf transform conversion.
+        </description>
+    </class>
+    <class name="nav_utils/odom_proc"
+           type="nav_utils::OdometryProcNodelet"
+           base_class_type="nodelet::Nodelet">
+        <description>
+            Odometry message processing.
+        </description>
+    </class>
+    <class name="nav_utils/odom_twist_to_child_frame"
+           type="nav_utils::OdometryTwistToChildFrameNodelet"
+           base_class_type="nodelet::Nodelet">
+        <description>
+            Fix twist in odometry messages to be in child frame if it is incorrectly reported in the odometry frame.
+        </description>
+    </class>
+    <class name="nav_utils/odom_recompute_twist"
+           type="nav_utils::OdometryRecomputeTwistNodelet"
+           base_class_type="nodelet::Nodelet">
+        <description>
+            Recompute odometry twist by differentiating poses.
+        </description>
+    </class>
+    <class name="nav_utils/tf_to_odom"
+           type="nav_utils::TransformToOdometryNodelet"
+           base_class_type="nodelet::Nodelet">
+        <description>
+            Tf Transform to odometry conversion.
+        </description>
+    </class>
+    <class name="nav_utils/tf_to_path"
+           type="nav_utils::TransformToPathNodelet"
+           base_class_type="nodelet::Nodelet">
+        <description>
+            Tf Transform to path conversion.
+        </description>
+    </class>
+    <class name="nav_utils/tf_fast_repeater"
+           type="nav_utils::TfFastRepeaterNodelet"
+           base_class_type="nodelet::Nodelet">
+        <description>
+            Repeat a TF on a higher frequency.
+        </description>
+    </class>
+    <class name="nav_utils/tf_copy"
+           type="nav_utils::TfCopyNodelet"
+           base_class_type="nodelet::Nodelet">
+        <description>
+            Copy a transform elsewhere.
+        </description>
+    </class>
+    <class name="nav_utils/CropBox"
+           type="nav_utils::CropBoxNodelet"
+           base_class_type="nodelet::Nodelet">
+        <description>
+            pcl/CropBox
+        </description>
+    </class>
+</library>

@@ -1,0 +1,68 @@
+<launch>
+    <arg name="map_frame" default="fused_map" />
+    <arg name="icp_map_frame" default="map" />
+    <arg name="marker_camera" default="infra" doc="infra|rgb" />
+    <arg name="fixed_frame" default="$(arg map_frame)_fast" doc="Just for visualization" />
+    <arg name="marker_difficulty" default="easy" doc="easy|medium|hard; Chooses the amount of false positives of the apriltag detector." />
+    <arg name="visualize" default="true" />
+    <arg name="fuse_icp_slam" default="true" />
+    <arg name="run_rviz" default="false" />
+    <arg name="run_icp_slam" default="false" />
+    <arg name="run_factor_graph" default="true" doc="Set to false if you want to run the factorgraph separately, e.g. from IDE." />
+
+    <!-- REMOVE START -->
+    <arg name="task" default="" />
+    <!-- REMOVE END -->
+
+    <include file="$(dirname)/apriltags_$(arg marker_camera).launch" pass_all_args="true"/>
+
+    <!-- Load parameters of the factorgraph localization. The name in `ns` has to be consistent with the name of the node after this group. -->
+    <group ns="aro_localization">
+        <rosparam command="load" file="$(dirname)/../config/costs_icp.yaml" if="$(arg fuse_icp_slam)" />
+        <rosparam command="load" file="$(dirname)/../config/costs.yaml" unless="$(arg fuse_icp_slam)" />
+        <rosparam command="load" file="$(dirname)/../config/detector_$(arg marker_difficulty).yaml" />
+        <rosparam command="load" file="$(dirname)/../config/solver.yaml" />
+        <!-- REMOVE START -->
+        <rosparam command="load" file="$(dirname)/../config/task_$(arg task).yaml" if="$(eval task != '')" />
+        <!-- REMOVE END -->
+        <rosparam subst_value="true">
+            map_frame: $(arg map_frame)
+            visualize: $(arg visualize)
+            publish_tf: True
+            invert_tf: True
+            fuse_icp_slam: $(arg fuse_icp_slam)
+        </rosparam>
+    </group>
+    <!-- The factorgraph localization node is optional here so that you can run it externally, e.g. from IDE. -->
+    <!-- To run it externally, just run 'rosrun aro_localization aro_localization'. -->
+    <node name="aro_localization" pkg="aro_localization" type="aro_localization" if="$(arg run_factor_graph)" output="screen" />
+
+    <node pkg="nav_utils" type="tf_fast_repeater" name="fused_map_fast_publisher">
+        <param name="publish_frequency" value="20" />
+        <param name="error_reporting_defer_time" value="30" />
+        <param name="parent_frame" value="$(arg map_frame)" />
+        <param name="child_frame" value="$(arg icp_map_frame)" if="$(arg fuse_icp_slam)" />
+        <param name="child_frame" value="odom" unless="$(arg fuse_icp_slam)" />
+        <param name="new_parent_frame" value="$(arg map_frame)_fast" />
+    </node>
+    
+    <node name="visualize_odom" pkg="aro_sim" type="visualize_odom" respawn="true">
+        <param name="fixed_frame" value="$(arg fixed_frame)" />
+    </node>
+    
+    <include file="$(dirname)/rviz.launch" if="$(arg run_rviz)" />
+    
+    <group if="$(arg run_icp_slam)">
+        <include file="$(find aro_slam)/launch/scan_to_cloud.launch" pass_all_args="true"/>
+        <include file="$(find aro_slam)/launch/cloud_filter.launch" pass_all_args="true"/>
+        <include file="$(find aro_slam)/launch/icp_slam.launch" pass_all_args="true">
+            <arg name="map_frame" value="$(arg icp_map_frame)" />
+        </include>
+
+        <node name="visualize_icp_odom" pkg="aro_sim" type="visualize_odom" respawn="true">
+            <param name="fixed_frame" value="$(arg fixed_frame)" />
+            <remap from="odom" to="icp_odom" />
+            <remap from="odom_vis" to="icp_odom_vis" />
+        </node>
+    </group>
+</launch>

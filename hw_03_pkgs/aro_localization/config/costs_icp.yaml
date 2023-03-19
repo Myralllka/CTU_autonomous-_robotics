@@ -1,0 +1,9 @@
+c_odom_default: 0.1
+c_odom_scale: 0.1
+c_odom_bumper: 0
+c_icp_default: 2.0
+c_icp_scale: 2.0
+c_icp_yaw_scale: 3.0
+c_mr_scale: 1.0
+c_ma_scale: 1.0
+c_marker_yaw_scale: 0.3
