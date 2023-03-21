@@ -833,7 +833,7 @@ class FactorGraph(object):
 if __name__ == '__main__':
     # This code is for playing with the optimization of factorgraph. It generates a sample trajectory and runs the
     # factorgraph localization on it.
-    np.random.seed(1)
+    # np.random.seed(1)
     def sim(trajectory_length=10, v=0.3, w=0.1,
             x0=np.array([0, 0, 0]), mr=np.array([[2], [1], [0]]), ma=np.array([[1], [0], [0]]),
             noise_odom=0.1, noise_mr=0.1, noise_ma=0.1):
