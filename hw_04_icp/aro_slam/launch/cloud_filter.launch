@@ -1,0 +1,17 @@
+<launch>
+    <arg name="cloud" default="cloud"/>
+    <node name="cloud_filter" pkg="aro_slam" type="cloud_filter"
+          output="log">
+        <rosparam subst_value="true">
+            max_age:    0.5
+            grid_res:   0.1
+            k:          5
+            normal_eigenvector: 1
+            max_roughness: .inf
+            project_to_plane: false
+        </rosparam>
+        <remap from="cloud" to="$(arg cloud)"/>
+        <remap from="grid_cloud" to="$(arg cloud)/grid"/>
+        <remap from="smooth_cloud" to="$(arg cloud)/smooth"/>
+    </node>
+</launch>

@@ -1,0 +1,333 @@
+#!/usr/bin/env python
+"""
+Simultaneous localization and mapping (SLAM) based on Iterative Closest Point
+(ICP). Localization is achieved by aligning input point clouds to a reference,
+which can be either a previous input point cloud (a key frame) or an
+incrementally built map from registered point clouds.
+"""
+from __future__ import absolute_import, division, print_function
+from aro_slam import (
+    Channels,
+    descriptor,
+    icp,
+    IcpResult,
+    Loss,
+    position,
+    timing,
+    transform,
+    AbsorientDomain,
+)
+from enum import Enum
+from geometry_msgs.msg import Point, Transform, TransformStamped
+from nav_msgs.msg import Odometry
+import numpy as np
+import rospy
+from ros_numpy import msgify, numpify
+from scipy.spatial import cKDTree
+from sensor_msgs.msg import PointCloud2
+from std_msgs.msg import ColorRGBA
+from timeit import default_timer as timer
+from tf2_py import TransformException
+import tf2_ros
+from visualization_msgs.msg import Marker, MarkerArray
+
+
+class Alignment(Enum):
+    frame_to_frame = 'frame_to_frame'
+    frame_to_map = 'frame_to_map'
+
+
+class Descriptor(Enum):
+    position = 'position'
+    position_and_normal = 'position_and_normal'
+
+
+class IcpSlam(object):
+    def __init__(self):
+        # Localization mode.
+        self.alignment = Alignment(rospy.get_param('~alignment', Alignment.frame_to_frame))
+
+        self.body_frame = rospy.get_param('~body_frame', 'base_link')
+
+        # Moving frame to track and align (defaults to odom).
+        # It can also be the robot frame, e.g. base_footprint, if no odometry
+        # is provided.
+        self.odom_frame = rospy.get_param('~odom_frame', 'odom')
+
+        # Fixed map frame, parent of the odometry frame above.
+        self.map_frame = rospy.get_param('~map_frame', 'map')
+
+        # Throw messages older than a threshold [s].
+        self.max_age = rospy.get_param('~max_age', 0.25)
+
+        # Timeout waiting for TF transforms [s].
+        self.timeout = rospy.Duration.from_sec(rospy.get_param('~timeout', 0.25))
+
+        # Always publish odom-to-map transform even if localization fails?
+        # This may be handy for navigation or visualization in map frame,
+        # so that the best known odom-to-map transform is always available.
+        self.always_publish_tf = rospy.get_param('~always_publish_tf', True)
+
+        # Minimum number of input points to enable localization.
+        self.min_input_points = rospy.get_param('~min_input_points', 20)
+
+        # Maximum delta rotation to accept the transform from ICP [rad].
+        self.max_delta_rotation = rospy.get_param('~max_delta_rotation', None)
+
+        # Maximum delta translation to accept the transform from ICP [m].
+        self.max_delta_translation = rospy.get_param('~max_delta_translation', None)
+
+        # Loss function used in ICP optimization.
+        self.loss = Loss(rospy.get_param('~loss', Loss.point_to_point))
+
+        # Absolute orientation domain.
+        self.absorient_domain = AbsorientDomain(rospy.get_param('~absorient_domain', AbsorientDomain.SE2))
+
+        self.descriptor = Descriptor(rospy.get_param('~descriptor', Descriptor.position))
+        if self.descriptor == Descriptor.position:
+            # Position as a descriptor.
+            self.descriptor = position
+        elif self.descriptor == Descriptor.position_and_normal:
+            # Position and normal as a descriptor.
+            self.descriptor = lambda x_struct: descriptor(x_struct,
+                                                          fields=Channels.position.value + Channels.normal.value,
+                                                          weights=[1., 1., 1., .1, .1, .1])
+
+        # Max number of ICP iterations
+        self.max_iters = rospy.get_param('~max_iters', 50)
+
+        # Ratio of correspondences with lowest nearest-neighbor distances
+        # for which we optimize the criterion in given iteration, i.e., the
+        # inliers. This should correspond to the expected minimum relative
+        # overlap between point clouds. The inlier set may change in each
+        # iteration.
+        self.inlier_ratio = rospy.get_param('~inlier_ratio', 1.0)
+        # Multiplier of the maximum inlier distance found using
+        # inlier ratio, enlarging or reducing the inlier set for optimization.
+        self.inlier_dist_mult = rospy.get_param('~inlier_dist_mult', 1.0)
+        # Maximum nearest-neighbor distance for any inlier.
+        self.max_inlier_dist = rospy.get_param('~max_inlier_dist', float('inf'))
+
+        # Requirements for successful localization
+        self.localized_inlier_ratio = rospy.get_param('~localized_inlier_ratio', 0.5)
+        self.localized_inlier_dist = rospy.get_param('~localized_inlier_dist', 0.1)
+
+        # Update map when inlier ratio gets lower than threshold.
+        self.mapping_inlier_ratio = rospy.get_param('~mapping_inlier_ratio', 0.8)
+        self.mapping_min_dist = rospy.get_param('~mapping_min_dist', 0.1)
+
+        # Reference cloud for localization.
+        self.map_msg = None
+        self.map_struct = None
+
+        # The index is separate such that full 3D points can be used in
+        # mapping in spite of only 2D points being used in localization.
+        self.map_index = None
+
+        # The time of previous map update.
+        self.last_update_stamp = None
+
+        self.tf_pub = tf2_ros.TransformBroadcaster()
+        self.tf = tf2_ros.Buffer()
+        self.tf_sub = tf2_ros.TransformListener(self.tf)
+
+        # Current transform from odom to map (odom pose in map).
+        self.odom_to_map = np.eye(4)
+        self.odom_to_map_stamp = None
+
+        self.markers_pub = rospy.Publisher('~markers', MarkerArray, queue_size=5)
+        self.registered_cloud_pub = rospy.Publisher('registered', PointCloud2, queue_size=5)
+        self.inliers_cloud_pub = rospy.Publisher('inliers', PointCloud2, queue_size=5)
+
+        self.map_pub = rospy.Publisher('map', PointCloud2, queue_size=5, latch=True)
+        self.odom_pub = rospy.Publisher('icp_odom', Odometry, queue_size=5)
+
+        self.cloud_sub = rospy.Subscriber('cloud', PointCloud2, self.process_cloud, queue_size=5)
+
+    # @timing
+    def publish_markers(self, stamp, x_inl, y_inl):
+        pt_size = 0.05
+        markers = MarkerArray()
+        if x_inl is not None:
+            marker = Marker()
+            marker.header.frame_id = self.map_frame
+            marker.header.stamp = stamp
+            marker.ns = 'inliers/registered'
+            marker.id = 0
+            marker.type = Marker.POINTS
+            marker.action = Marker.MODIFY
+            marker.pose.orientation.w = 1.
+            marker.scale.x = pt_size
+            marker.scale.y = pt_size
+            marker.color = ColorRGBA(0., 1., 0., 1.)
+            marker.points = [Point(*x) for x in x_inl]
+            markers.markers.append(marker)
+        if y_inl is not None:
+            marker = Marker()
+            marker.header.frame_id = self.map_frame
+            marker.header.stamp = stamp
+            marker.ns = 'inliers/reference'
+            marker.id = 0
+            marker.type = Marker.POINTS
+            marker.action = Marker.MODIFY
+            marker.pose.orientation.w = 1.
+            marker.scale.x = pt_size
+            marker.scale.y = pt_size
+            marker.color = ColorRGBA(0., 0., 1., 1.)
+            marker.points = [Point(*y) for y in y_inl]
+            markers.markers.append(marker)
+        if x_inl is not None and y_inl is not None:
+            marker = Marker()
+            marker.header.frame_id = self.map_frame
+            marker.header.stamp = stamp
+            marker.ns = 'inliers/correspondences'
+            marker.id = 0
+            marker.type = Marker.LINE_LIST
+            marker.action = Marker.MODIFY
+            marker.pose.orientation.w = 1.
+            marker.scale.x = pt_size / 2
+            marker.color = ColorRGBA(1., 0., 0., 1.)
+            for x, y in zip(x_inl, y_inl):
+                marker.points.append(Point(*x))
+                marker.points.append(Point(*y))
+
+            markers.markers.append(marker)
+        if markers.markers:
+            self.markers_pub.publish(markers)
+
+    def localize(self, x_struct):
+        """Localize input point cloud using the current odom-to-map transform.
+
+        @param x_struct Input point cloud, structured array.
+        @return localized flag, ICP result
+        """
+        assert isinstance(x_struct, np.ndarray)
+
+        t = timer()
+        res = icp(x_struct,
+                  self.map_struct, y_index=self.map_index,
+                  descriptor=self.descriptor,
+                  T=self.odom_to_map,
+                  max_iters=self.max_iters,
+                  inlier_ratio=self.inlier_ratio, inlier_dist_mult=self.inlier_dist_mult,
+                  max_inlier_dist=self.max_inlier_dist,
+                  loss=self.loss,
+                  absorient_domain=self.absorient_domain)
+
+        localized = (res.T is not None
+                     and res.mean_inlier_dist is not None
+                     and res.mean_inlier_dist <= self.localized_inlier_dist
+                     and res.inliers is not None
+                     and res.inliers.mean() >= self.localized_inlier_ratio)
+
+        age = (rospy.Time.now() - self.map_msg.header.stamp).to_sec()
+        if localized:
+            self.odom_to_map = res.T
+            rospy.logdebug('Localized %i input points in %i map points %.3fs old (%.3f s).',
+                           x_struct.size, self.map_struct.size, age, timer() - t)
+        else:
+            rospy.logwarn('Failed to localize %i input points in %i map points %.3f s old: '
+                          '%.0f%% inliers with error %.2f m. (%.3f s)',
+                          x_struct.size, self.map_struct.size, age,
+                          100.0 * res.inliers.mean() if res.inliers is not None else 0.0,
+                          res.mean_inlier_dist, timer() - t)
+
+        return localized, res
+
+    # @timing
+    def update_map(self, x_struct, msg):
+        t = timer()
+        if self.map_struct is None or self.alignment == Alignment.frame_to_frame:
+            self.map_struct = x_struct
+            self.map_msg = msg
+            keep = np.ones(self.map_struct.shape, dtype=bool)
+            n_keep = keep.sum()
+        else:
+            # TODO: ARO homework 4: Implement mapping with frame-to-map alignment.
+            pass
+
+        self.map_index = cKDTree(self.descriptor(self.map_struct))
+        self.map_pub.publish(self.map_msg)
+        if n_keep > 0:
+            rospy.loginfo('Map updated, %i / %i points new (%.3f s).', n_keep, self.map_struct.size, timer() - t)
+
+    # @timing
+    def process_cloud(self, msg):
+        assert isinstance(msg, PointCloud2)
+
+        num_points = msg.width * msg.height
+        if num_points < self.min_input_points:
+            rospy.logwarn_throttle(1.0, 'Skipping point cloud with %i < %i points.',
+                                   num_points, self.min_input_points)
+            return
+
+        age = (rospy.Time.now() - msg.header.stamp).to_sec()
+        if age > self.max_age:
+            rospy.logwarn_throttle(1.0, 'Skipping point cloud %.2f s > %.2f s old.',
+                                   age, self.max_age)
+            return
+
+        try:
+            cloud_to_odom = self.tf.lookup_transform(self.odom_frame, msg.header.frame_id, msg.header.stamp,
+                                                     self.timeout)
+            cloud_to_odom = numpify(cloud_to_odom.transform)
+        except TransformException as ex:
+            rospy.logwarn_throttle(1.0, 'Could not transform cloud in %s to frame %s: %s.',
+                                   msg.header.frame_id, self.odom_frame, ex)
+            return
+
+        x_struct = numpify(msg)
+        x_struct = transform(cloud_to_odom, x_struct)
+
+        if self.map_struct is not None:
+            localized, res = self.localize(x_struct)
+            assert isinstance(res, IcpResult)
+        else:
+            localized, res = False, IcpResult()
+
+        if localized or self.always_publish_tf:
+            tf_msg = TransformStamped()
+            tf_msg.transform = msgify(Transform, self.odom_to_map)
+            tf_msg.header.stamp = msg.header.stamp
+            tf_msg.header.frame_id = self.map_frame
+            tf_msg.child_frame_id = self.odom_frame
+            self.tf_pub.sendTransform(tf_msg)
+
+        try:
+            base_to_map = self.tf.lookup_transform(
+                self.map_frame, self.body_frame, msg.header.stamp, rospy.Duration(0.01))
+        except TransformException as ex:
+            rospy.logwarn_throttle(1.0, 'Could not transform %s to frame %s: %s.',
+                                   self.map_frame, self.body_frame, ex)
+            return
+        odom = Odometry()
+        odom.header.frame_id = self.map_frame
+        odom.header.stamp = msg.header.stamp
+        odom.child_frame_id = self.body_frame
+        odom.pose.pose.position = base_to_map.transform.translation
+        odom.pose.pose.orientation = base_to_map.transform.rotation
+        self.odom_pub.publish(odom)
+
+        x_struct = transform(self.odom_to_map, x_struct)
+        msg_registered = msgify(PointCloud2, x_struct)
+        msg_registered.header = msg.header
+        msg_registered.header.frame_id = self.map_frame
+        self.registered_cloud_pub.publish(msg_registered)
+
+        if self.map_struct is None or (localized and res.inliers.mean() < self.mapping_inlier_ratio):
+            self.update_map(x_struct, msg_registered)
+
+        # t = timer()
+        self.publish_markers(msg.header.stamp, res.x_inliers, res.y_inliers)
+        # rospy.loginfo('Publish markers: %.6f s', timer() - t)
+
+
+def main():
+    rospy.init_node('icp_slam')
+    node = IcpSlam()
+    rospy.spin()
+
+
+
+if __name__ == '__main__':
+    main()
