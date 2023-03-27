@@ -170,16 +170,15 @@ def icp(x_struct, y_struct, y_index=None,
     x_inl = None
     y_inl = None
 
-    Q = descriptor(y_struct).T
-    # TODO: check if struct_to_unstructed or descriptor are needed here
-    P_init = descriptor(x_struct).T
+    Q = structured_to_unstructured(y_struct[['x', 'y', 'z']]).T
+    P_init = structured_to_unstructured(x_struct[['x', 'y', 'z']]).T
     Q_normals = structured_to_unstructured(y_struct[['normal_x', 'normal_y', 'normal_z']]).T
-
+    
     R, t = np.eye(3), np.array([0, 0, 0]).reshape(3, 1)
 
     for i in range(max_iters):
         # ARO homework 4: Implement point-to-point ICP.
-        # TODO: ARO homework 4: Implement point-to-plane ICP.
+        # ARO homework 4: Implement point-to-plane ICP.
 
         # 1. Transform source points to align with reference points
         P_corrected = R @ P_init + t
@@ -227,17 +226,8 @@ def icp(x_struct, y_struct, y_index=None,
             t = T[:3, 3:4]
 
         # 5. Stop the ICP loop when the inliers error does not change much
-        #p = 0.9999999999
-        #k = (np.log(1 - p)) / (np.log(1 - inl_ratios[-1] ** 2))
-        #print(f"{k=}")
-        #if (np.abs(inl_ratios[-2] - inl_ratios[-1]) < 0.1):
-        #    break
-        #if i > k:
-        #    break
 
         eps = 1e-5
-        #print(f"{inl_errs[-2:]=}")
-        #print(np.abs(inl_errs[-2] - inl_errs[-1]))
         if np.abs(inl_errs[-2] - inl_errs[-1]) < eps:
             break
     else:

@@ -243,8 +243,21 @@ class IcpSlam(object):
             keep = np.ones(self.map_struct.shape, dtype=bool)
             n_keep = keep.sum()
         else:
-            # TODO: ARO homework 4: Implement mapping with frame-to-map alignment.
-            pass
+            # ARO homework 4: Implement mapping with frame-to-map alignment.
+            dists, ids = self.map_index.query(self.descriptor(x_struct))
+            inl = dists >= self.mapping_min_dist
+
+            correspondences = np.array([(i, j) for i, j in zip(range(x_struct.shape[0]), ids)])
+            correspondences = correspondences[inl]
+
+            map_new = np.asarray(x_struct)
+            self.map_struct = np.append(self.map_struct, x_struct[correspondences[:, 0]])
+            n_keep = correspondences.shape[0]
+
+            msg_new = msgify(PointCloud2, self.map_struct)
+            msg_new.header = msg.header
+            msg_new.header.frame_id = self.map_frame
+            self.map_msg = msg_new
 
         self.map_index = cKDTree(self.descriptor(self.map_struct))
         self.map_pub.publish(self.map_msg)
