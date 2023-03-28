@@ -50,34 +50,38 @@ def absolute_orientation(x, y, domain=AbsorientDomain.SE2):
         center = np.expand_dims(inp.mean(axis=1), 1)
         return center, inp - center
 
+    T = np.eye(4)
     if domain == AbsorientDomain.SE2:
         x = x[:2]
         y = y[:2]
+        x_mean, x_centered = center_data(x.copy())
+        y_mean, y_centered = center_data(y.copy())
+        Hx2 = np.dot(x_centered[0], y_centered[0])
+        Hy2 = np.dot(x_centered[1], y_centered[1])
+        Hxy = np.dot(x_centered[0], y_centered[1])
+        Hyx = np.dot(x_centered[1], y_centered[0])
+        th = np.arctan((Hxy - Hyx) / (Hx2 + Hy2))
+        R = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
+        t = (y_mean - R @ x_mean)
+        T[:2, :2] = R
+        T[:2, 3:4] = t
+
     elif domain == AbsorientDomain.SE3:
         x = x[:3]
         y = y[:3]
+        x_mean, x_centered = center_data(x.copy())
+        y_mean, y_centered = center_data(y.copy())
+
+        H = x_centered @ y_centered.T
+        U, S, Vh = np.linalg.svd(H, full_matrices=False)
+        R = Vh.T @ U.T
+        t = y_mean - R @ x_mean
+        T[:3, :3] = R
+        T[:3, 3:4] = t
+
     else:
         print("ERROR!!!!!")
         return None
-
-    x_mean, x_centered = center_data(x.copy())
-    y_mean, y_centered = center_data(y.copy())
-    
-    H = x_centered @ y_centered.T
-
-    U, S, Vh = np.linalg.svd(H, full_matrices=False)
-
-    R = Vh.T @ U.T
-    t = y_mean - R @ x_mean
-
-    T = np.eye(4)
-
-    if domain == AbsorientDomain.SE2:
-        T[:2, :2] = R
-        T[:2, 3:4] = t
-    elif domain == AbsorientDomain.SE3:
-        T[:3, :3] = R
-        T[:3, 3:4] = t
 
     return T
 
@@ -301,7 +305,7 @@ def absorient_demo(known_corresps=True):
         Q_inl = Q[:, np.random.choice(range(num_points), n_inl)]
 
     # run absolute orientation algorithm to estimate the transformation
-    Tr = absolute_orientation(P_inl, Q_inl, domain=AbsorientDomain.SE2)
+    Tr = absolute_orientation(P_inl, Q_inl, domain=AbsorientDomain.SE3)
 
     print('ICP found transformation:\n%s\n' % Tr)
     print('GT transformation:\n%s\n' % Tr_gt)
@@ -382,5 +386,5 @@ def icp_demo():
 
 if __name__ == '__main__':
     # python -m aro_slam.icp
-    #absorient_demo()
-    icp_demo()
+    absorient_demo()
+    #icp_demo()
