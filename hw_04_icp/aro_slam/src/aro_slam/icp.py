@@ -9,6 +9,7 @@ except ImportError:
 import rospy
 from scipy.spatial import cKDTree
 import unittest
+import copy
 
 __all__ = [
     'absolute_orientation',
@@ -50,11 +51,11 @@ def absolute_orientation(x, y, domain=AbsorientDomain.SE2):
         return center, inp - center
 
     if domain == AbsorientDomain.SE2:
-        x = x[:2, :]
-        y = y[:2, :]
+        x = x[:2]
+        y = y[:2]
     elif domain == AbsorientDomain.SE3:
-        x = x[:3, :]
-        y = y[:3, :]
+        x = x[:3]
+        y = y[:3]
     else:
         print("ERROR!!!!!")
         return None
@@ -164,15 +165,18 @@ def icp(x_struct, y_struct, y_index=None,
     inl_errs = [np.inf]
 
     # Mean inliers ratios (relative to number of points in a source cloud) histoty.
-    inl_ratios = [0, 0]
+    inl_ratios = [0]
 
     ids = None
     x_inl = None
     y_inl = None
-
+    
+    x_struct = x_struct.copy()
     Q = structured_to_unstructured(y_struct[['x', 'y', 'z']]).T
     P_init = structured_to_unstructured(x_struct[['x', 'y', 'z']]).T
+
     Q_normals = structured_to_unstructured(y_struct[['normal_x', 'normal_y', 'normal_z']]).T
+    P_normals = structured_to_unstructured(x_struct[['normal_x', 'normal_y', 'normal_z']]).T
     
     R, t = np.eye(3), np.array([0, 0, 0]).reshape(3, 1)
 
@@ -182,15 +186,20 @@ def icp(x_struct, y_struct, y_index=None,
 
         # 1. Transform source points to align with reference points
         P_corrected = R @ P_init + t
+        x_struct["x"] = P_corrected[0]
+        x_struct["y"] = P_corrected[1]
+        x_struct["z"] = P_corrected[2]
+        if 'normal_x' in x_struct.dtype.names:
+            P_normals_corrected = R @ P_normals
+            x_struct['normal_x'] = P_normals_corrected[0]
+            x_struct['normal_y'] = P_normals_corrected[1]
+            x_struct['normal_z'] = P_normals_corrected[2]
 
         # 2. Find correspondences (Nearest Neighbors Search)
         # Find distances between source and reference point clouds and corresponding indexes
         # (Hint: use https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.cKDTree.html)
 
-        #tree = cKDTree(Q.T)
-        dists, ids = y_index.query(P_corrected.T)
-
-        correspondences = np.array([(i, j) for i, j in zip(range(P_corrected.shape[1]), ids)])
+        dists, ids = y_index.query(descriptor(x_struct))
         
         # 3. Construct set of inliers (median filter, implemented :))
         d_max = np.percentile(dists, 100.0 * inlier_ratio)
@@ -207,23 +216,23 @@ def icp(x_struct, y_struct, y_index=None,
             rospy.logwarn('Not enough inliers: %i.', n_inliers)
             break
 
-        correspondences = correspondences[inl]
         # 4. Use inlier points with found correspondences to solve Absolute orientation
+        correspondences = np.asarray([(i, j) for i, j in zip(range(P_corrected.shape[1]), ids)])[inl]
+
+        P_c = P_init[:, correspondences[:, 0]]
+        Q_c = Q[:, correspondences[:, 1]]
 
         if loss == Loss.point_to_point:
-            T = absolute_orientation(P_init[:, correspondences[:, 0]], Q[:, correspondences[:, 1]], absorient_domain)
-
-            R = T[:3, :3]
-            t = T[:3, 3:4]
+            T = absolute_orientation(P_c, Q_c, absorient_domain)
 
         elif loss == Loss.point_to_plane:
-            dd = np.diag(Q_normals[:, correspondences[:, 1]].T @ (P_corrected[:, correspondences[:, 0]] - Q[:, correspondences[:, 1]]))
+
+            dd = np.sum(Q_normals[:, correspondences[:, 1]] * (P_corrected[:, correspondences[:, 0]] - Q_c), axis=0)
             Q_plane = P_corrected[:, correspondences[:, 0]] - dd * Q_normals[:, correspondences[:, 1]]
 
-            T = absolute_orientation(P_init[:, correspondences[:, 0]], Q_plane, absorient_domain)
-
-            R = T[:3, :3]
-            t = T[:3, 3:4]
+            T = absolute_orientation(P_c, Q_plane, absorient_domain)
+        R = T[:3, :3]
+        t = T[:3, 3:4]
 
         # 5. Stop the ICP loop when the inliers error does not change much
 
@@ -358,7 +367,7 @@ def icp_demo():
 
     # run ICP algorithm to estimate the transformation (it is initialized with identity matrix)
     Tr_init = np.eye(4)
-    res = icp(cloud1, cloud2, T=Tr_init, inlier_ratio=0.8, inlier_dist_mult=2.0, max_iters=100,
+    res = icp(cloud1, cloud2, T=Tr_init, inlier_ratio=0.9, inlier_dist_mult=2.0, max_iters=100,
               loss=Loss.point_to_plane, descriptor=position, absorient_domain=AbsorientDomain.SE3)
               #loss=Loss.point_to_point, descriptor=position, absorient_domain=AbsorientDomain.SE3)
     Tr_icp = res.T
