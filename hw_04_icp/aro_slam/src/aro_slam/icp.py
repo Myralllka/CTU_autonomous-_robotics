@@ -372,7 +372,7 @@ def icp_demo():
     # run ICP algorithm to estimate the transformation (it is initialized with identity matrix)
     Tr_init = np.eye(4)
     res = icp(cloud1, cloud2, T=Tr_init, inlier_ratio=0.9, inlier_dist_mult=2.0, max_iters=100,
-              loss=Loss.point_to_plane, descriptor=position, absorient_domain=AbsorientDomain.SE3)
+              loss=Loss.point_to_point, descriptor=position, absorient_domain=AbsorientDomain.SE3)
               #loss=Loss.point_to_point, descriptor=position, absorient_domain=AbsorientDomain.SE3)
     Tr_icp = res.T
 
@@ -386,5 +386,5 @@ def icp_demo():
 
 if __name__ == '__main__':
     # python -m aro_slam.icp
-    absorient_demo()
-    #icp_demo()
+    #absorient_demo()
+    icp_demo()

@@ -111,7 +111,7 @@ class FactorGraph(object):
         available should contain NaNs. List Nx3."""
 
         # Solver
-        # TODO: ARO homework 3: test with various combinations of loss and f_scale, select the best
+        # ARO homework 3: test with various combinations of loss and f_scale, select the best
         # (loss, f_scale) tested configs: ('linear', 1.0), ('soft_l1', 0.05), ('huber', 1.0), ('cauchy', 1.9)
         self.solver_options = {
             "method": 'trf',
@@ -406,8 +406,7 @@ class FactorGraph(object):
         res[2, res[2, :] > np.pi] = res[2, res[2, :] > np.pi] - 2 * np.pi
         return res
 
-    def compute_residuals(self, x, mr, ma, z_odom, z_mr, z_ma, z_icp, idx_mr, idx_ma, idx_icp, c_odom, c_mr, c_ma,
-                          c_icp):
+    def compute_residuals(self, x, mr, ma, z_odom, z_mr, z_ma, z_icp, idx_mr, idx_ma, idx_icp, c_odom, c_mr, c_ma, c_icp):
         """Compute residuals (errors) of all measurements.
 
         :param np.ndarray x: Fused robot poses. Numpy array 3x(N+1).
@@ -447,10 +446,14 @@ class FactorGraph(object):
         res_ma = np.repeat(np.atleast_2d(c_ma)[:, idx_ma], res_ma.shape[0], axis=0) * res_ma  # apply cost
         res_ma[2, :] *= self.marker_yaw_scale
 
-        # TODO: after homework 4: integrate ICP odometry
+        # TODO; after homework 4: integrate ICP odometry
         res_icp = None
         if self.fuse_icp:
-            pass
+            print("="*15)
+            observed_icp = self.get_world_pose(z_icp[:, idx_icp], x[:, idx_icp])
+            res_icp = self.compute_pose_residual(observed_icp, x[:, idx_icp])
+            res_icp = np.repeat(np.atleast_2d(c_icp)[:, idx_icp], res_icp.shape[0], axis=0) * res_icp  # apply cost
+            print("="*15)
 
         return res_odom, res_mr, res_ma, res_icp
 
@@ -569,10 +572,14 @@ class FactorGraph(object):
         J_icp = lil_matrix((dim * idx_icp.shape[0], num_variables), dtype=np.float32)
         k = 0
         for t in idx_icp:
-            # TODO: after homework 4: compute the ICP odom part of the Jacobian in J and J1, i.e.
+            # after homework 4: compute the ICP odom part of the Jacobian in J and J1, i.e.
             #       differentiate res_icp_odom[:, t] w.r.t x[t] and x[t+1]
+            J1 = -np.eye(3)
+
             J = np.eye(3)
-            J1 = np.eye(3)
+            J[0, 2] = -sx[t] * z_icp[0, t] - cx[t] * z_icp[1, t]
+            J[1, 2] =  cx[t] * z_icp[0, t] - sx[t] * z_icp[1, t]
+
             J = c_icp[t] * J  # apply cost
             J[2, :] *= self.icp_yaw_scale
             J1 = c_icp[t] * J1  # apply cost

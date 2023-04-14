@@ -1,0 +1,20 @@
+<launch>
+  <arg name="robot_radius" default="$(eval 0.3)"/>
+    <arg name="robot_diameter" value="$(eval 2 * robot_radius)"/>
+    <arg name="robot_frame" default="base_footprint"/>
+    <arg name="rviz" default="true"/>
+
+    <node name="planner" pkg="aro_planning" type="planner.py" output="screen">
+        <rosparam subst_value="true">
+            map_frame: map
+            robot_frame: $(arg robot_frame)
+            robot_diameter: $(arg robot_diameter)
+            occupancy_threshold: 90
+        </rosparam>
+        <remap from="occupancy" to="occupancy"/>
+      </node>
+
+    <node if="$(arg rviz)" name="rviz" pkg="rviz" type="rviz"
+      args="-d $(find aro_planning)/config/vis.rviz"/>
+
+</launch>
