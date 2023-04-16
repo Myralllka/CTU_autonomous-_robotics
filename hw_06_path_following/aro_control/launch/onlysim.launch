@@ -1,0 +1,13 @@
+<launch>
+
+    <arg name="rviz_control" default="true" />
+    
+    <include file="$(find aro_sim)/launch/sim_with_markers.launch" pass_all_args="true">
+        <arg name="rviz" value="false"/>
+    </include>
+    
+    <node if="$(arg rviz_control)" name="rviz" pkg="rviz" type="rviz"
+          args="-d $(find aro_control)/rviz/control.rviz"/>
+
+</launch>
+

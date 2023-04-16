@@ -1,0 +1,16 @@
+name: evaluation
+root: ./
+startup_window: status
+windows:
+  - roscore:
+      layout: tiled
+      panes:
+        - roscore
+  - working windows:
+      panes:
+        - waitForRos; roslaunch aro_control onlysim.launch
+        - waitForRos; roslaunch aro_slam aro_slam.launch
+        - waitForRos; roslaunch aro_control evaluation.launch
+  - important:
+      panes:
+        - waitForRos; roslaunch aro_control control.launch
