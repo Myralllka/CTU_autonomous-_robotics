@@ -1,0 +1,17 @@
+name: evaluation
+root: ./
+startup_window: status
+windows:
+  - roscore:
+      layout: tiled
+      panes:
+        - roscore
+  - working windows:
+      panes:
+        - waitForRos; roscd aro_planning; cd config; rosbag play -l occ_dat.bag
+        - waitForRos; rosrun tf2_ros static_transform_publisher 0 0 0 0 0 0 map base_footprint
+        - waitForRos; rviz
+  - services:
+      panes:
+        - waitForRos; roslaunch aro_frontier frontier.launch
+        - waitForRos; history -s "rosservice call /get_closest_frontier"
