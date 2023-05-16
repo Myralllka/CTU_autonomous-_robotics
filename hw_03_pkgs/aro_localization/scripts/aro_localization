@@ -396,7 +396,6 @@ class FactorGraphLocalizationNode(object):
             rospy.logwarn_throttle(1.0, 'Could not transform %s to frame %s: %s.', self.odom_frame, self.body_frame, ex)
 
         # Publish the pose of the relative marker
-
         if not np.any(np.isnan(mr)):  # only publish when the marker pose changed from the init value
             p = np.array(mr).ravel().tolist()
             mr_pose = PoseStamped()

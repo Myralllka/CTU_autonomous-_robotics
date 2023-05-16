@@ -268,10 +268,12 @@ class PathFollower(object):
 
     def stop_robot(self):
         with self.lock:
-            self.sendVelocityCommand(self.velocity / 2, self.angular_rate / 2)
-            time.sleep(2 / self.control_freq)
-            self.sendVelocityCommand(self.velocity / 4, self.angular_rate / 4)
-            time.sleep(2 / self.control_freq)
+            self.sendVelocityCommand(self.velocity / 2, 0)
+            time.sleep(3 / self.control_freq)
+            self.sendVelocityCommand(self.velocity / 4, 0)
+            time.sleep(3 / self.control_freq)
+            self.sendVelocityCommand(self.velocity / 8, 0)
+            time.sleep(3 / self.control_freq)
             self.velocity = 0
             self.angular_rate = 0
             self.sendVelocityCommand(0, 0)
@@ -302,8 +304,6 @@ class PathFollower(object):
         if np.linalg.norm(pose[:2] - self.path[self.path_index][:2]) <= self.radius_carrot_following:
             print("going to the next point", self.path_index + 1)
             self.path_index += 1
-        # goal = self.path[self.path_index][:2]
-        # self.path_index += 1
         return goal
 
     def publishPathVisualization(self, path):
@@ -436,7 +436,7 @@ class PathFollower(object):
             goal_dist = np.linalg.norm(goal_dir)
 
             # react on situation when the robot has reached the goal
-            if self.path_index == self.path.shape[0] and np.linalg.norm(self.path[-1][:2] - pose[:2]) < 0.07:
+            if self.path_index == self.path.shape[0] and np.linalg.norm(self.path[-1][:2] - pose[:2]) < self.goal_reached_dist:
                 self.stop_robot()
                 self.action_server.set_succeeded(FollowPathResult(Pose2D(pose[0], pose[1], 0)), text='Goal reached.')
                 return
@@ -449,16 +449,15 @@ class PathFollower(object):
             translation = np.array([tf.translation.x, tf.translation.y])
             rotation = quaternion_matrix(slots(tf.rotation))[:2, :2]
             tp = rotation @ goal + translation
-            print(tp)
             # compute angular velocity
             dy = tp[1]
             R = (goal_dist ** 2) / (2 * dy)
 
             if tp[0] <= self.radius_carrot_following * 0.8:
                 self.angular_rate = np.sign(dy) * self.max_angular_rate
-                self.velocity -= self.max_velocity * 0.07
+                self.velocity -= self.max_velocity * 0.08
             else:
-                self.velocity += self.max_velocity * 0.07
+                self.velocity += self.max_velocity * 0.05
                 self.angular_rate = self.velocity / R
 
             print(tp, goal_dir, dy, R, self.velocity, self.angular_rate)

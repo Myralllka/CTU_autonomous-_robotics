@@ -1,0 +1,98 @@
+<launch>
+    <!--
+        IMPORTANT: Configure your nodes for evaluation within this launch file.
+    -->
+    <arg name="robot_radius" default="$(eval 0.3)"/>
+    <arg name="robot_diameter" value="$(eval 2 * robot_radius)"/>
+    <arg name="robot_diameter_frontier" value="$(eval 2 * robot_radius)"/>
+    <arg name="robot_frame" default="base_footprint"/>
+
+    <arg name="odom_frame" default="odom"/>
+    <arg name="fused_odom" default="false" doc="If true, factorgraph localization is used also for navigation and mapping. This is not recommended." />
+    <arg name="icp_map_frame" default="icp_map" if="$(arg fused_odom)"/>
+    <arg name="icp_map_frame" default="map" unless="$(arg fused_odom)"/>
+    <arg name="fused_map_frame" default="map" if="$(arg fused_odom)"/>
+    <arg name="fused_map_frame" default="fused_map" unless="$(arg fused_odom)"/>
+    <arg name="map_frame" default="map"/>
+    <arg name="map_frame_fast" default="$(arg map_frame)_fast" if="$(arg fused_odom)"/>
+    <arg name="map_frame_fast" default="$(arg map_frame)" unless="$(arg fused_odom)"/>
+    <arg name="run_rviz" default="true" />
+    
+    <include file="$(find aro_slam)/launch/aro_slam.launch" pass_all_args="true">
+        <arg name="map_frame" value="$(arg icp_map_frame)" if="$(arg fused_odom)" />
+        <arg name="map_frame" value="$(arg map_frame)" unless="$(arg fused_odom)" />
+        <arg name="occupancy_map_frame" value="$(arg map_frame)" />
+        <arg name="occupancy_mapper_tf_timeout" value="30" if="$(arg fused_odom)" />
+    </include>
+    <node name="$(anon rviz)" pkg="rviz" type="rviz" args="-d $(dirname)/rviz.rviz -f $(arg map_frame_fast)" if="$(arg run_rviz)"/>
+
+    <include file="$(find aro_localization)/launch/aro_loc_sim.launch" pass_all_args="true">
+        <arg name="map_frame" value="$(arg fused_map_frame)" />
+        <arg name="icp_map_frame" value="$(arg icp_map_frame)" />
+        <arg name="run_icp_slam" value="false" />
+        <arg name="fuse_icp_slam" value="true" />
+        <arg name="fixed_frame" value="$(arg map_frame_fast)" />
+        <arg name="run_rviz" value="false"/>
+    </include>
+
+    <node name="frontiers" pkg="aro_frontier" type="frontier.py" output="screen">
+        <rosparam subst_value="true">
+            map_frame: $(arg map_frame)
+            robot_frame: $(arg robot_frame)
+            robot_diameter: $(arg robot_diameter_frontier)
+            occupancy_threshold: 90
+        </rosparam>
+        <remap from="occupancy" to="occupancy"/>
+    </node>
+
+    <node name="planner" pkg="aro_planning" type="planner.py" output="screen">
+        <rosparam subst_value="true">
+            map_frame: $(arg map_frame)
+            robot_frame: $(arg robot_frame)
+            robot_diameter: $(arg robot_diameter)
+            occupancy_threshold: 25
+        </rosparam>
+        <remap from="occupancy" to="occupancy"/>
+    </node>
+
+    <node name="explorer" pkg="aro_exploration" type="explorer.py" output="screen">
+        <rosparam subst_value="true">
+            robot_frame: $(arg robot_frame)
+            map_frame: $(arg map_frame)
+            plan_interval: 20.0
+            goal_reached_dist: $(arg robot_radius)
+            retries: 10
+            run_mode: "eval"
+        </rosparam>
+        <remap from="get_closest_frontier" to="get_closest_frontier"/>
+        <remap from="get_random_frontier" to="get_random_frontier"/>
+        <remap from="get_random_goal_pose" to="get_random_goal_pose"/>
+        <remap from="path" to="path"/>
+    </node>
+
+    <node name="path_follower" pkg="aro_control" type="path_follower.py" output="screen">
+        <rosparam subst_value="true">
+            map_frame: $(arg map_frame_fast)
+            odom_frame: $(arg odom_frame)
+            robot_frame: $(arg robot_frame)
+            control_freq: 10.0
+            goal_reached_dist: 0.1
+            goal_reached_angle: .inf
+            use_path_theta: none
+            max_age: 0.5
+            max_path_dist: 0.5
+            look_ahead: 0.35
+            max_velocity: 0.35
+            max_speed: 0.5
+            max_angular_rate: 1.5
+            control_law: "pure_pursuit"
+            const_velocity: 0.25
+            const_angular_rate: 1.5
+            use_dummy_grid: 0
+            max_ang_for_high_velocity: 0.8
+        </rosparam>
+        <remap from="path" to="path"/>
+        <remap from="cmd_vel" to="cmd_vel"/>
+    </node>
+    
+</launch>

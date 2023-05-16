@@ -58,6 +58,7 @@ class FrontierExplorer():
         self.grid_msg_header = None
         self.grf_service = None
         self.gcf_service = None
+        self.glf_service = None
 
     @staticmethod
     def get_world_pose(pt, gr_info):
@@ -286,7 +287,7 @@ class FrontierExplorer():
 
         area_diam = int(np.ceil(self.robot_diameter / self.grid_info.resolution))
         Y, X = np.ogrid[:area_diam, :area_diam]
-        dist_from_center = np.sqrt((X - (area_diam) / 2) ** 2 + (Y - (area_diam) / 2) ** 2)
+        dist_from_center = np.sqrt((X - (area_diam) / 2) ** 2 + (Y - (area_diam) / 2) ** 2) - 1
 
         grid[grid == -1] = 50
         grid = scipy.ndimage.grey_dilation(grid, footprint=(dist_from_center < area_diam / 2))
@@ -300,15 +301,51 @@ class FrontierExplorer():
 
         return frontiers_px
 
+    def get_largest_frontier(self, request):
+        """ Return the largest frontier """
+        #
+        frontiers = self.compute_WFD()
+        # compute the index of the best frontier
+
+        if len(frontiers) == 0:
+            return []
+
+        dists = list()
+        coors = list()
+        x, y = self.get_robot_coordinates()
+        x, y = self.get_world_pose([y, x], self.grid_info)
+        sz = []
+        for i in range(len(frontiers)):
+            sz.append(len(frontiers[i]))
+
+            tx, ty = np.mean(frontiers[i], axis=0)
+            idx = np.argmin(np.sqrt(np.sum((np.array(frontiers[i]).T - np.array([[tx], [ty]])) ** 2, axis=0)))
+            tx, ty = frontiers[i][idx]
+            tx, ty = self.get_world_pose([ty, tx], self.grid_info)
+            dists.append(np.sqrt((x - tx) ** 2 + (y - ty) ** 2))
+            coors.append((tx, ty))
+
+        best_frontier_idx = np.argmax(np.array(sz))
+
+        # compute the center of the chosen frontier
+        frontier_center = coors[best_frontier_idx]
+        # compute the index of the best frontier
+        x, y = frontier_center[0], frontier_center[1]
+        response = GenerateFrontierResponse(Pose2D(x, y, 0.0))
+        self.publish_goal(x, y)
+        return response
+
     def get_random_frontier(self, request):
         """ Return random frontier """
         #
         frontiers = self.compute_WFD()
         if len(frontiers) == 0:
-            return None
+            return []
         frontier = np.random.choice(frontiers)
         # compute center of the randomly drawn frontier here
         frontier_center = np.mean(frontier, axis=0)
+        idx = np.argmin(np.sqrt(
+            np.sum((np.array(frontier).T - np.array([[frontier_center[0]], [frontier_center[1]]])) ** 2, axis=0)))
 
         # transform the coordinates from grid to real-world coordinates (in meters)
         x, y = self.get_world_pose([frontier_center[1], frontier_center[0]], self.grid_info)
@@ -322,12 +359,17 @@ class FrontierExplorer():
         frontiers = self.compute_WFD()
         # compute the index of the best frontier
 
+        if len(frontiers) == 0:
+            return []
+
         dists = list()
         coors = list()
         x, y = self.get_robot_coordinates()
         x, y = self.get_world_pose([y, x], self.grid_info)
         for i in range(len(frontiers)):
             tx, ty = np.mean(frontiers[i], axis=0)
+            idx = np.argmin(np.sqrt(np.sum((np.array(frontiers[i]).T - np.array([[tx], [ty]])) ** 2, axis=0)))
+            tx, ty = frontiers[i][idx]
             tx, ty = self.get_world_pose([ty, tx], self.grid_info)
             dists.append(np.sqrt((x - tx) ** 2 + (y - ty) ** 2))
             coors.append((tx, ty))
@@ -348,6 +390,7 @@ class FrontierExplorer():
             # Create services
             self.grf_service = rospy.Service('get_random_frontier', GenerateFrontier, self.get_random_frontier)
             self.gcf_service = rospy.Service('get_closest_frontier', GenerateFrontier, self.get_closest_frontier)
+            self.glf_service = rospy.Service('get_largest_frontier', GenerateFrontier, self.get_largest_frontier)
             self.grid_ready = True
 
 

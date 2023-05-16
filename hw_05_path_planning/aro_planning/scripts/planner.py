@@ -94,6 +94,8 @@ class PathPlanner():
         return res
 
     def reconstruct_path(self, came_from, current):
+        if current is None:
+            return []
         total_path = [current]
         while current in came_from.keys():
             current = came_from[current]
@@ -167,21 +169,27 @@ class PathPlanner():
 
         area_diam = int(np.ceil(self.robot_diameter / self.grid_info.resolution))
         Y, X = np.ogrid[:area_diam, :area_diam]
-        dist_from_center = np.sqrt((X - (area_diam - 1) / 2) ** 2 + (Y - (area_diam - 1) / 2) ** 2)
+        dist_from_center = np.sqrt((X - (area_diam) / 2) ** 2 + (Y - (area_diam) / 2) ** 2)
 
         grid = scipy.ndimage.grey_dilation(grid, footprint=(dist_from_center < area_diam / 2))
 
         # Compute the path, i.e. run some graph-based search algorithm.
         path = self.astar(grid, p_start[::-1], p_goal[::-1])
-        # for each in path:
-        #     grid[each[0], each[1]] = 50
+        if path is not None:
+            for each in path:
+                grid[each[0], each[1]] = 50
 
         # import matplotlib.pyplot as plt
+        # grid[p_start[1], p_start[0]] = 80
+        # grid[p_goal[1], p_goal[0]] = 80
         # plt.imshow(grid)
         # plt.show()
 
-        real_path = [Pose2D(pos[0], pos[1], 0) for pos in
-                     [self.get_world_pose(waypoint[::-1], self.grid_info) for waypoint in path]]
+        if path is None:
+            real_path = []
+        else:
+            real_path = [Pose2D(pos[0], pos[1], 0) for pos in
+                         [self.get_world_pose(waypoint[::-1], self.grid_info) for waypoint in path]]
         response = PlanPathResponse(real_path)
         # Publish planned path for visualization in Rviz.
         self.publish_path(response.path)

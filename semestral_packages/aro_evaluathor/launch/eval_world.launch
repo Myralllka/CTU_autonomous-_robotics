@@ -1,0 +1,13 @@
+<launch>
+    <arg name="world" default="aro_maze_8" doc="{aro_maze_8, stage_3, stage_4}"/>
+    <arg name="run_mode" default="single" doc="{manual, single}"/>
+    <arg name="marker_config" default="1" doc="1-4, gives positions of the markers in the loaded world." />
+    <arg name="time_limit" default="180"/>
+
+    <node name="evaluathor" pkg="aro_evaluathor" type="run_eval.py" output="screen">
+        <param name="map_name" value="$(arg world)"/>
+        <param name="marker_config" value="$(arg marker_config)"/>
+        <param name="time_limit" value="$(arg time_limit)"/>
+        <param name="run_mode" value="$(arg run_mode)"/>
+    </node>
+</launch>

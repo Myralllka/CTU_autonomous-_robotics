@@ -449,11 +449,9 @@ class FactorGraph(object):
         # TODO; after homework 4: integrate ICP odometry
         res_icp = None
         if self.fuse_icp:
-            print("="*15)
             observed_icp = self.get_world_pose(z_icp[:, idx_icp], x[:, idx_icp])
             res_icp = self.compute_pose_residual(observed_icp, x[:, idx_icp])
             res_icp = np.repeat(np.atleast_2d(c_icp)[:, idx_icp], res_icp.shape[0], axis=0) * res_icp  # apply cost
-            print("="*15)
 
         return res_odom, res_mr, res_ma, res_icp
 
