@@ -13,11 +13,15 @@ from scipy.sparse import lil_matrix
 from scipy.sparse import vstack
 
 try:
-    from utils import coords_to_transform_matrix, find_nearest_index_for_new_measurement, \
+    from .utils import coords_to_transform_matrix, find_nearest_index_for_new_measurement, \
         merge_dicts, sec_to_nsec, transform_matrix_to_coords, nsec_to_sec
-except (ValueError, ModuleNotFoundError):
-    from aro_localization.utils import coords_to_transform_matrix, find_nearest_index_for_new_measurement, \
-        merge_dicts, sec_to_nsec, transform_matrix_to_coords, nsec_to_sec
+except (ImportError, ValueError, ModuleNotFoundError):
+    try:
+        from utils import coords_to_transform_matrix, find_nearest_index_for_new_measurement, \
+            merge_dicts, sec_to_nsec, transform_matrix_to_coords, nsec_to_sec
+    except (ValueError, ModuleNotFoundError):
+        from aro_localization.utils import coords_to_transform_matrix, find_nearest_index_for_new_measurement, \
+            merge_dicts, sec_to_nsec, transform_matrix_to_coords, nsec_to_sec
 
 
 class FactorGraph(object):
@@ -122,14 +126,8 @@ class FactorGraph(object):
                 'atol': 1e-4,
                 'btol': 1e-4
             },
-            #"loss": "linear",
-            #"f_scale": 1.0,
             "loss": "soft_l1",
             "f_scale": 0.05,
-            #"loss": "huber",
-            #"f_scale": 1.0,
-            #"loss": "cauchy",
-            #"f_scale": 1.9,
             "max_nfev": 40,
             "verbose": 1,
             "ftol": 1e-3,
@@ -450,7 +448,7 @@ class FactorGraph(object):
         res_icp = None
         if self.fuse_icp:
             observed_icp = self.get_world_pose(z_icp[:, idx_icp], x[:, idx_icp])
-            res_icp = self.compute_pose_residual(observed_icp, x[:, idx_icp])
+            res_icp = self.compute_pose_residual(observed_icp, x[:, idx_icp + 1])
             res_icp = np.repeat(np.atleast_2d(c_icp)[:, idx_icp], res_icp.shape[0], axis=0) * res_icp  # apply cost
 
         return res_odom, res_mr, res_ma, res_icp
@@ -521,6 +519,11 @@ class FactorGraph(object):
             J[0, 2] = -sx[t] * z_odom[0, t] - cx[t] * z_odom[1, t]
             J[1, 2] = cx[t] * z_odom[0, t] - sx[t] * z_odom[1, t]
 
+            # J = np.eye(3) + np.array([[0, 0, -np.sin(x[2][t]) * z_odom[0][t] - np.cos(x[2][t]) * z_odom[1][t]],
+            #                           [0, 0, np.cos(x[2][t]) * z_odom[0][t] - np.sin(x[2][t]) * z_odom[1][t]],
+            #                           [0, 0, 0]])
+            # J1 = -np.eye(3)
+
             J = c_odom[t] * J  # apply cost
             J1 = c_odom[t] * J1  # apply cost
             j = t * dim  # index of t-th pose in xmr
@@ -534,6 +537,9 @@ class FactorGraph(object):
             # ARO homework 3: compute the relative marker part of the Jacobian in J, i.e.
             #       differentiate res_mr[:, t] w.r.t x[t] and mr
 
+            # J = np.eye(3) + np.array([[0, 0, -np.sin(x[2][t]) * z_mr[0][t] - np.cos(x[2][t]) * z_mr[1][t]],
+            #                           [0, 0, np.cos(x[2][t]) * z_mr[0][t] - np.sin(x[2][t]) * z_mr[1][t]],
+            #                           [0, 0, 0]])
             J = np.eye(3)
             J[0, 2] = -sx[t] * z_mr[0, t] - cx[t] * z_mr[1, t]
             J[1, 2] =  cx[t] * z_mr[0, t] - sx[t] * z_mr[1, t]
@@ -555,6 +561,9 @@ class FactorGraph(object):
         for t in idx_ma:
             # ARO homework 3: compute the absolute marker part of the Jacobian in J, i.e.
             #       differentiate res_ma[:, t] w.r.t x[t]
+            # J = np.eye(3) + np.array([[0, 0, -np.sin(x[2][t]) * z_ma[0][t] - np.cos(x[2][t]) * z_ma[1][t]],
+            #                           [0, 0, np.cos(x[2][t]) * z_ma[0][t] - np.sin(x[2][t]) * z_ma[1][t]],
+            #                           [0, 0, 0]])
 
             J = np.eye(3)
             J[0, 2] = -sx[t] * z_ma[0, t] - cx[t] * z_ma[1, t]
@@ -572,6 +581,9 @@ class FactorGraph(object):
         for t in idx_icp:
             # after homework 4: compute the ICP odom part of the Jacobian in J and J1, i.e.
             #       differentiate res_icp_odom[:, t] w.r.t x[t] and x[t+1]
+            # J = np.eye(3) + np.array([[0, 0, -np.sin(x[2][t]) * z_icp[0][t] - np.cos(x[2][t]) * z_icp[1][t]],
+            #                           [0, 0, np.cos(x[2][t]) * z_icp[0][t] - np.sin(x[2][t]) * z_icp[1][t]],
+            #                           [0, 0, 0]])
             J1 = -np.eye(3)
 
             J = np.eye(3)
@@ -836,115 +848,123 @@ class FactorGraph(object):
 
 
 if __name__ == '__main__':
-    # This code is for playing with the optimization of factorgraph. It generates a sample trajectory and runs the
-    # factorgraph localization on it.
-    # np.random.seed(1)
-    def sim(trajectory_length=10, v=0.3, w=0.1,
-            x0=np.array([0, 0, 0]), mr=np.array([[2], [1], [0]]), ma=np.array([[1], [0], [0]]),
-            noise_odom=0.1, noise_mr=0.1, noise_ma=0.1):
-        """Generate a spiral trajectory with the given parameters.
-
-        :param int trajectory_length: Number of steps of the trajectory.
-        :param float v: Linear velocity.
-        :param float w: Angular velocity.
-        :param np.ndarray x0: Initial pose estimate. Numpy array 3.
-        :param np.ndarray mr: Relative marker pose. Numpy array 3x1.
-        :param np.ndarray ma: Absolute marker pose. Numpy array 3x1.
-        :param float noise_odom: Noise of odometry measurements.
-        :param float noise_mr: Noise of relative marker measurements.
-        :param float noise_ma: Noise of absolute marker measurements.
-        :return: x0, x, mr, ma, z_odom, z_ma, z_mr
-        """
-        def forward(u, x0):
-            K = u.shape[1]
-            pos_x, pos_y, phi = x0[0], x0[1], x0[2]
-            x = [np.stack((pos_x, pos_y, phi))]
-
-            for k in range(K):
-                pos_x = pos_x + u[0, k] * np.cos(phi)
-                pos_y = pos_y + u[0, k] * np.sin(phi)
-                phi = phi + u[2, k]
-                x.append(np.stack((pos_x, pos_y, phi)))
-            return np.hstack(x)
-
-        np.set_printoptions(formatter={'float_kind': "{:.4f}".format})
-
-        # ground truth robot positions x and marker mr
-        x0 = x0.reshape(3, 1)  # initial position
-        u = np.ones((3, trajectory_length-1), dtype=float)
-        u[0, :] = u[0, :] * v
-        u[1, :] = 0
-        u[2, :] = u[2, :] * w
-        x = forward(u, x0)  # generate ground truth trajectory x (based on ground truth velocity control u)
-        
-        z_odom = u + np.random.randn(3, trajectory_length-1)*noise_odom
-        z_ma, z_mr = np.zeros((3, x.shape[1] - 1)), np.zeros((3, x.shape[1] - 1))
-        for t in range(1,x.shape[1]):
-            R = np.array([[np.cos(x[2,t]), -np.sin(x[2,t])], [np.sin(x[2,t]), np.cos(x[2,t])]])
-            z_ma[0:2, t - 1] = np.matmul(R.transpose(), ma[0:2,0]) - np.matmul(R.transpose(), x[0:2, t]) + np.random.randn(2) * noise_ma
-            z_ma[2, t - 1] = ma[2] - x[2, t] + np.random.randn() * noise_ma
-            z_mr[0:2, t - 1] = np.matmul(R.transpose(), mr[0:2,0]) - np.matmul(R.transpose(), x[0:2, t]) + np.random.randn(2) * noise_mr
-            z_mr[2, t - 1] = mr[2] - x[2, t] + np.random.randn() * noise_mr
-
-        return x0, x, mr, ma, z_odom, z_ma, z_mr
-
-    # Generate a test trajectory
-    x0, X, Mr, Ma, Z_odom, Z_ma, Z_mr = sim(
-        trajectory_length=30, v=0.3, w=0.3, noise_odom=0.1, noise_mr=0.1, noise_ma=0.1)
-
-    # Set costs for the measurements
-    C_odom = 1.0 * np.ones((Z_odom.shape[1],))
-    C_mr = 1.0 * np.ones((Z_mr.shape[1],))
-    C_ma = 1.0 * np.ones((Z_ma.shape[1],))
-
-    fg = FactorGraph(ma=Ma.ravel().tolist(), mr_gt=Mr.ravel().tolist())
-
-    opt_step = 3  # After how many measurements we perform optimization
-    mr_keep_every_nth = 4
-    ma_keep_every_nth = 2
-
-    for i in range(X.shape[1] - 1):
-        gt = X[:, i].tolist()
-        z_odom = Z_odom[:, i].tolist()
-        z_mr = Z_mr[:, i].tolist() if i % mr_keep_every_nth == 0 else [np.nan, np.nan, np.nan]
-        z_ma = Z_ma[:, i].tolist() if i % ma_keep_every_nth == 0 else [np.nan, np.nan, np.nan]
-        t = int((i + 1) * 1e9)
-
-        # Add the measurement
-        fg.add_z(z_odom, C_odom[i], z_mr, C_mr[i], z_ma, C_ma[i], [], [], gt, t, t, None)
-
-        # Reoptimize and visualize only after a few measurements
-        if i % opt_step != (opt_step - 1):
-            continue
-
-        # Data conversion from Python lists to Numpy arrays necessary for the library to work
-        x = np.array(fg.x)
-        mr = np.array(fg.mr)
-        ma = np.array(fg.ma)
-        z_odom = np.array(fg.z_odom).transpose()
-        z_mr = np.array(fg.z_mr).transpose()
-        z_ma = np.array(fg.z_ma).transpose()
-        z_icp = np.array(fg.z_icp).transpose()
-        c_odom = np.array(fg.c_odom)
-        c_ma = np.array(fg.c_ma)
-        c_mr = np.array(fg.c_mr)
-        c_icp = np.array(fg.c_icp)
-
-        # Run optimization
-        res = fg.optimize(x, mr, ma, z_odom, z_mr, z_ma, z_icp, c_odom, c_mr, c_ma, c_icp)
-
-        # Store results of the optimization
-        fg.x = res[0]
-        fg.mr = res[1]
-
-        print("Relative marker localization error: " + str(np.linalg.norm(fg.mr - Mr)))
-
-        # Visualize the factorgraph
-        fg.visu(np.array(fg.x), fg.mr, ma, z_odom, z_mr, z_ma, z_icp, np.array(fg.z_gt_odom).transpose(),
-                fg.last_optimized_idx, only_main=True)
-        plt.tight_layout()
-        plt.pause(1)
-        image_name = 'traj_%02i.png' % i
-        image_path = os.path.join('/tmp', image_name)
-        plt.savefig(image_path)
-    plt.pause(10)
+    pass
+    # # np.random.seed(10)
+    # # This code is for playing with the optimization of factorgraph. It generates a sample trajectory and runs the
+    # # factorgraph localization on it.
+    #
+    # def sim(trajectory_length=10, v=0.3, w=0.1,
+    #         x0=np.array([0, 0, 0]), mr=np.array([[2], [1], [0]]), ma=np.array([[1], [0], [0]]),
+    #         noise_odom=0.1, noise_mr=0.1, noise_ma=0.1):
+    #     """Generate a spiral trajectory with the given parameters.
+    #
+    #     :param int trajectory_length: Number of steps of the trajectory.
+    #     :param float v: Linear velocity.
+    #     :param float w: Angular velocity.
+    #     :param np.ndarray x0: Initial pose estimate. Numpy array 3.
+    #     :param np.ndarray mr: Relative marker pose. Numpy array 3x1.
+    #     :param np.ndarray ma: Absolute marker pose. Numpy array 3x1.
+    #     :param float noise_odom: Noise of odometry measurements.
+    #     :param float noise_mr: Noise of relative marker measurements.
+    #     :param float noise_ma: Noise of absolute marker measurements.
+    #     :return: x0, x, mr, ma, z_odom, z_ma, z_mr
+    #     """
+    #
+    #     def forward(u, x0):
+    #         K = u.shape[1]
+    #         pos_x, pos_y, phi = x0[0], x0[1], x0[2]
+    #         x = [np.stack((pos_x, pos_y, phi))]
+    #
+    #         for k in range(K):
+    #             pos_x = pos_x + u[0, k] * np.cos(phi)
+    #             pos_y = pos_y + u[0, k] * np.sin(phi)
+    #             phi = phi + u[2, k]
+    #             x.append(np.stack((pos_x, pos_y, phi)))
+    #         return np.hstack(x)
+    #
+    #     np.set_printoptions(formatter={'float_kind': "{:.4f}".format})
+    #
+    #     # ground truth robot positions x and marker mr
+    #     x0 = x0.reshape(3, 1)  # initial position
+    #     u = np.ones((3, trajectory_length - 1), dtype=float)
+    #     u[0, :] = u[0, :] * v
+    #     u[1, :] = 0
+    #     u[2, :] = u[2, :] * w
+    #     x = forward(u, x0)  # generate ground truth trajectory x (based on ground truth velocity control u)
+    #
+    #     z_odom = u + np.random.randn(3, trajectory_length - 1) * noise_odom
+    #     z_ma, z_mr = np.zeros((3, x.shape[1] - 1)), np.zeros((3, x.shape[1] - 1))
+    #     for t in range(1, x.shape[1]):
+    #         R = np.array([[np.cos(x[2, t]), -np.sin(x[2, t])], [np.sin(x[2, t]), np.cos(x[2, t])]])
+    #         z_ma[0:2, t - 1] = np.matmul(R.transpose(), ma[0:2, 0]) - np.matmul(R.transpose(),
+    #                                                                             x[0:2, t]) + np.random.randn(
+    #             2) * noise_ma
+    #         z_ma[2, t - 1] = ma[2] - x[2, t] + np.random.randn() * noise_ma
+    #         z_mr[0:2, t - 1] = np.matmul(R.transpose(), mr[0:2, 0]) - np.matmul(R.transpose(),
+    #                                                                             x[0:2, t]) + np.random.randn(
+    #             2) * noise_mr
+    #         z_mr[2, t - 1] = mr[2] - x[2, t] + np.random.randn() * noise_mr
+    #
+    #     return x0, x, mr, ma, z_odom, z_ma, z_mr
+    #
+    #
+    # # Generate a test trajectory
+    # x0, X, Mr, Ma, Z_odom, Z_ma, Z_mr = sim(
+    #     trajectory_length=30, v=0.3, w=0.3, noise_odom=0.1, noise_mr=0.1, noise_ma=0.1)
+    #
+    # # Set costs for the measurements
+    # C_odom = 0.4 * np.ones((Z_odom.shape[1],))
+    # C_mr = 1.5 * np.ones((Z_mr.shape[1],))
+    # C_ma = 2 * np.ones((Z_ma.shape[1],))
+    #
+    # fg = FactorGraph(ma=Ma.ravel().tolist(), mr_gt=Mr.ravel().tolist())
+    #
+    # opt_step = 3  # After how many measurements we perform optimization
+    # mr_keep_every_nth = 4
+    # ma_keep_every_nth = 2
+    #
+    # for i in range(X.shape[1] - 1):
+    #     gt = X[:, i].tolist()
+    #     z_odom = Z_odom[:, i].tolist()
+    #     z_mr = Z_mr[:, i].tolist() if i % mr_keep_every_nth == 0 else [np.nan, np.nan, np.nan]
+    #     z_ma = Z_ma[:, i].tolist() if i % ma_keep_every_nth == 0 else [np.nan, np.nan, np.nan]
+    #     t = int((i + 1) * 1e9)
+    #
+    #     # Add the measurement
+    #     fg.add_z(z_odom, C_odom[i], z_mr, C_mr[i], z_ma, C_ma[i], [], [], gt, t, t, None)
+    #
+    #     # Reoptimize and visualize only after a few measurements
+    #     if i % opt_step != (opt_step - 1):
+    #         continue
+    #
+    #     # Data conversion from Python lists to Numpy arrays necessary for the library to work
+    #     x = np.array(fg.x)
+    #     mr = np.array(fg.mr)
+    #     ma = np.array(fg.ma)
+    #     z_odom = np.array(fg.z_odom).transpose()
+    #     z_mr = np.array(fg.z_mr).transpose()
+    #     z_ma = np.array(fg.z_ma).transpose()
+    #     z_icp = np.array(fg.z_icp).transpose()
+    #     c_odom = np.array(fg.c_odom)
+    #     c_ma = np.array(fg.c_ma)
+    #     c_mr = np.array(fg.c_mr)
+    #     c_icp = np.array(fg.c_icp)
+    #
+    #     # Run optimization
+    #     res = fg.optimize(x, mr, ma, z_odom, z_mr, z_ma, z_icp, c_odom, c_mr, c_ma, c_icp)
+    #
+    #     # Store results of the optimization32
+    #     fg.x = res[0]
+    #     fg.mr = res[1]
+    #
+    #     print("Relative marker localization error: " + str(np.linalg.norm(fg.mr - Mr)))
+    #
+    #     # Visualize the factorgraph
+    #     fg.visu(np.array(fg.x), fg.mr, ma, z_odom, z_mr, z_ma, z_icp, np.array(fg.z_gt_odom).transpose(),
+    #             fg.last_optimized_idx, only_main=True)
+    #     plt.tight_layout()
+    #     plt.pause(0.15)
+    #     image_name = 'traj_%02i.png' % i
+    #     image_path = os.path.join('/tmp', image_name)
+    #     plt.savefig(image_path)
+    # plt.pause(10)

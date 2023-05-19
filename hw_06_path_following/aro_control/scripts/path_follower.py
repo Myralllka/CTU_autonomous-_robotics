@@ -268,15 +268,15 @@ class PathFollower(object):
 
     def stop_robot(self):
         with self.lock:
-            self.sendVelocityCommand(self.velocity / 2, 0)
-            time.sleep(3 / self.control_freq)
-            self.sendVelocityCommand(self.velocity / 4, 0)
-            time.sleep(3 / self.control_freq)
-            self.sendVelocityCommand(self.velocity / 8, 0)
-            time.sleep(3 / self.control_freq)
+            self.send_velocity_command(self.velocity / 2, 0)
+            time.sleep(4 / self.control_freq)
+            self.send_velocity_command(self.velocity / 4, 0)
+            time.sleep(4 / self.control_freq)
+            self.send_velocity_command(self.velocity / 8, 0)
+            time.sleep(4 / self.control_freq)
             self.velocity = 0
             self.angular_rate = 0
-            self.sendVelocityCommand(0, 0)
+            self.send_velocity_command(0, 0)
 
     def get_lookahead_point(self, pose):
         """
@@ -359,7 +359,7 @@ class PathFollower(object):
         msg.scale.z = 0.01
         self.lookahead_point_pub.publish(msg)
 
-    def sendVelocityCommand(self, linear_velocity, angular_rate):
+    def send_velocity_command(self, linear_velocity, angular_rate):
         """
         Calls command to set robot velocity and angular rate.
 
@@ -453,21 +453,20 @@ class PathFollower(object):
             dy = tp[1]
             R = (goal_dist ** 2) / (2 * dy)
 
-            if tp[0] <= self.radius_carrot_following * 0.8:
-                self.angular_rate = np.sign(dy) * self.max_angular_rate
+            if tp[0] <= self.radius_carrot_following * 0.95:
+                self.angular_rate += np.sign(dy) * self.max_angular_rate * 0.08
                 self.velocity -= self.max_velocity * 0.08
+                self.velocity = max(self.velocity, self.max_velocity/15)
             else:
-                self.velocity += self.max_velocity * 0.05
+                self.velocity += self.max_velocity * 0.08
                 self.angular_rate = self.velocity / R
-
-            print(tp, goal_dir, dy, R, self.velocity, self.angular_rate)
 
             # apply limits on angular rate and linear velocity
             self.angular_rate = np.clip(self.angular_rate, -self.max_angular_rate, self.max_angular_rate)
             self.velocity = np.clip(self.velocity, 0.0, self.max_velocity)
 
             # Apply desired velocity and angular rate
-            self.sendVelocityCommand(self.velocity, self.angular_rate)
+            self.send_velocity_command(self.velocity, self.angular_rate)
 
             self.action_server.publish_feedback(
                 FollowPathFeedback(Pose2D(pose[0], pose[1], 0), 0.0))  # compute path deviation if needed

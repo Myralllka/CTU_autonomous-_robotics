@@ -287,7 +287,7 @@ class FrontierExplorer():
 
         area_diam = int(np.ceil(self.robot_diameter / self.grid_info.resolution))
         Y, X = np.ogrid[:area_diam, :area_diam]
-        dist_from_center = np.sqrt((X - (area_diam) / 2) ** 2 + (Y - (area_diam) / 2) ** 2) - 1
+        dist_from_center = np.sqrt((X - (area_diam) / 2) ** 2 + (Y - (area_diam) / 2) ** 2) - 2
 
         grid[grid == -1] = 50
         grid = scipy.ndimage.grey_dilation(grid, footprint=(dist_from_center < area_diam / 2))

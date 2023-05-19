@@ -19,6 +19,8 @@
     <arg name="run_rviz" default="true" />
     
     <include file="$(find aro_slam)/launch/aro_slam.launch" pass_all_args="true">
+        <arg name="loss" value="point_to_plane" />
+        <arg name="descriptor" value="position_and_normal" />
         <arg name="map_frame" value="$(arg icp_map_frame)" if="$(arg fused_odom)" />
         <arg name="map_frame" value="$(arg map_frame)" unless="$(arg fused_odom)" />
         <arg name="occupancy_map_frame" value="$(arg map_frame)" />
@@ -81,12 +83,14 @@
             use_path_theta: none
             max_age: 0.5
             max_path_dist: 0.5
+
             look_ahead: 0.35
-            max_velocity: 0.35
-            max_speed: 0.5
-            max_angular_rate: 1.5
+            max_velocity: 0.3
+            max_speed: 0.3
+
+            max_angular_rate: 0.4
             control_law: "pure_pursuit"
-            const_velocity: 0.25
+            const_velocity: 0.2
             const_angular_rate: 1.5
             use_dummy_grid: 0
             max_ang_for_high_velocity: 0.8

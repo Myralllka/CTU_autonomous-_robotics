@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
 from __future__ import absolute_import, division, print_function
+
+import random
+
 from aro_msgs.srv import GenerateFrontier, PlanPath, PlanPathRequest, PlanPathResponse
 from geometry_msgs.msg import Pose, Pose2D, PoseStamped, PoseArray, Quaternion, Transform, TransformStamped
 from aro_msgs.msg import FollowPathAction, FollowPathFeedback, FollowPathResult, FollowPathGoal
@@ -64,6 +67,8 @@ class Explorer(object):
         self.retries = rospy.get_param('~retries', 3)
         self.run_mode = rospy.get_param('~run_mode', 'eval')
         assert self.retries >= 1
+        self.observed = False
+        self.stop_exploration = False
 
         # Mind thread safety which is not guaranteed in rospy when multiple callbacks access the same data.
         self.lock = RLock()
@@ -75,12 +80,10 @@ class Explorer(object):
         self.get_random_frontier = rospy.ServiceProxy('get_random_frontier', GenerateFrontier)
         rospy.wait_for_service('get_largest_frontier')
         self.get_largest_frontier = rospy.ServiceProxy('get_largest_frontier', GenerateFrontier)
-        # rospy.wait_for_service('get_best_value_frontier')
 
         # Utilize stop_simulation service when submitting for faster evaluation. Refer to evaluator package for details.
-
-        # rospy.wait_for_service('stop_simulation')
-        # self.stop_sim = rospy.ServiceProxy('stop_simulation', SetBool)
+        rospy.wait_for_service('stop_simulation')
+        self.stop_sim = rospy.ServiceProxy('stop_simulation', SetBool)
 
         self.tf = tf2_ros.Buffer()
         self.tf_sub = tf2_ros.TransformListener(self.tf)
@@ -99,11 +102,14 @@ class Explorer(object):
         self.tf = tf2_ros.Buffer()
         self.tf_sub = tf2_ros.TransformListener(self.tf)
 
+        # For termination
+        self.sub_relative_marker = rospy.Subscriber("relative_marker_pose", PoseStamped, self.cbk_rm)
+
         # Wait for initial pose.
         self.action_client.wait_for_server()
 
         self.init_pose = None
-        while self.init_pose == None:
+        while self.init_pose is None:
             try:
                 self.init_pose = self.get_robot_pose()
                 rospy.loginfo('Explorer initial pose:')
@@ -114,37 +120,47 @@ class Explorer(object):
                 rospy.sleep(1.0)
 
         # Create an exploration control loop state machine using timer and packages created for your homeworks. Good luck.
-        self.timer_exploration = rospy.Timer(rospy.Duration(1), self.tim_callback_exploration)
+        self.timer_exploration = rospy.Timer(rospy.Duration(0, 100), self.tim_cbk_exploration)
         rospy.loginfo('Initializing timer.')
+        # self.tim_callback_exploration()
 
-    def tim_callback_exploration(self, timer):
-        while not rospy.is_shutdown():
-            print("[ATTANTION!!!!!!] timer callback start")
-            rospy.loginfo('Timer callback running.')
+    def cbk_rm(self, msg):
+        rospy.loginfo("DONE!!")
+        self.observed = True
+
+    def tim_cbk_exploration(self, timer):
+        if self.stop_exploration:
+            self.timer_exploration.shutdown()
+            self.stop_sim(True)
+        rospy.loginfo("===> Timer callback START")
+        idx = random.choice([1, 2])
+        if idx == 1:
             frontier_goal = self.get_largest_frontier()
-            curent_pose = self.get_robot_pose()
+        else:
+            frontier_goal = self.get_closest_frontier()
+        curent_pose = self.get_robot_pose()
+        if frontier_goal.goal_pose is None or self.observed:
+            rospy.loginfo("==> No frontiers detected; coming to the starting point.")
+            req = PlanPathRequest(curent_pose, self.init_pose)
+            if self.observed:
+                self.stop_exploration = True
+        else:
+            rospy.loginfo("==> Frontiers detected; path planning...")
             req = PlanPathRequest(curent_pose, frontier_goal.goal_pose)
-            req = self.plan_path(req)
-            if req.path is None or len(req.path) == 0:
-                frontier_goal = self.get_random_frontier()
-                curent_pose = self.get_robot_pose()
-                if frontier_goal.goal_pose is None:
-                    req = PlanPathRequest(curent_pose, self.init_pose)
-                else:
-                    req = PlanPathRequest(curent_pose, frontier_goal.goal_pose)
-                req = self.plan_path(req)
-                if req.path is None or len(req.path) == 0:
-                    print("[ATTANTION!!!!!!] horrible mistake")
-                    continue
+        req = self.plan_path(req)
+        if req.path is None or len(req.path) == 0:
+            rospy.loginfo("==> [ERROR] Path is empty or non-reachable...")
+            return
+        else:
             path = req.path
             self.perform_single_plan(path)
             self.current_goal = path[-1]
 
-            while self.current_goal is not None:
-                rospy.loginfo_throttle(5.0, 'Waiting for end of path following.')
-                time.sleep(1.0)
-            print("[ATTANTION!!!!!!] timer callback stop")
-            break
+        while self.current_goal is not None:
+            rospy.loginfo_throttle(5.0, 'Waiting for end of path following.')
+            time.sleep(0.3)
+
+        rospy.loginfo("===> Timer callback END")
 
     def lookup_transform(self, target_frame, source_frame, t,
                          no_wait_frame=None, timeout=rospy.Duration.from_sec(0.0)):

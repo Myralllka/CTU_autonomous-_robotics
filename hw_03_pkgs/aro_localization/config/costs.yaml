@@ -2,6 +2,6 @@ c_odom_default: 1.0
 c_odom_scale: 1.0
 c_odom_bumper: 1e-6
 c_icp_default: 1.0
-c_icp_scale: 1.0
-c_mr_scale: 1.0
-c_ma_scale: 2.0
+c_icp_scale: 2.0
+c_mr_scale: 0.5
+c_ma_scale: 1.0
